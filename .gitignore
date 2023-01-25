@@ -1,0 +1,3 @@
+/FlaskApp/.env
+/FlaskApp/API_LOG.log
+docker-compose.yml
