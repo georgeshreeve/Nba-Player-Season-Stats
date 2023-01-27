@@ -310,7 +310,7 @@ class GetData(Resource):
                         )
                     if not query_response.empty:
                         data = ','.join(query_response.to_json(orient = 'records', lines = True).splitlines())
-                        logger.info("Successful execution {} {} {}".format(data, QueryId, QueryStatus))
+                        logger.info("Successful execution {} {}".format(QueryId, QueryStatus))
                         return make_response(jsonify(
                             {
                                 "Message": {
