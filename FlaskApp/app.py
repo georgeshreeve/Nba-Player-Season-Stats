@@ -309,7 +309,11 @@ class GetData(Resource):
                         }
                         )
                     if not query_response.empty:
-                        data = ','.join(query_response.to_json(orient = 'records', lines = True).splitlines())
+                        data = []
+                        response = query_response.to_json(orient = 'records', lines = True).splitlines()
+                        for line in response[:]:
+                            obj = json.loads(line)
+                            data.append(obj)
                         logger.info("Successful execution {} {}".format(QueryId, QueryStatus))
                         return make_response(jsonify(
                             {
@@ -317,8 +321,7 @@ class GetData(Resource):
                                     "QueryId": QueryId,
                                     "Status": QueryStatus
                                 },
-                                #"data": data
-                                "data": [(json.loads(json.dumps(data)))]
+                                "data": data
                             }
                         ),200)
                     else:
