@@ -43,8 +43,7 @@ limiter = Limiter(
     default_limits=["200 per day", "50 per hour"]
 )
 
-
-logger.add('/var/log/API_LOG.log', rotation = '3 MB', diagnose = False)
+logger.add('/var/log/API_LOG.log', rotation = '3 MB', diagnose = False, serialize = True)
 
 def log_exception(sender, exception, **extra):
     logger.error(exception)
@@ -86,6 +85,7 @@ class GeneratePlayers(Resource):
                 data = {}
             PlayerName = data.get("PlayerName")
             Id = data.get("Id")
+
             if PlayerName and Id:
                 query = "SELECT * FROM players WHERE player like '%{}%' and Id = {}".format(PlayerName,Id)
             elif PlayerName and not Id:
@@ -156,6 +156,97 @@ class GeneratePlayers(Resource):
             logger.error(e)
 
 
+class GenerateStats(Resource):
+
+    Id: int
+    Year: int
+    PlayerName: str
+
+    @limiter.limit("100/day")
+    @auth.login_required
+    def post(self):
+        try:
+            simple_app.send_task('CeleryWorker.DeleteOldQueries')
+            logger.info("Sent asyn task: Delete Old Queries")
+            try:
+                data = request.get_json()
+            except:
+                data = {}
+            Id = data.get("Id")
+            Year = data.get("Year")
+            PlayerName = data.get("PlayerName")
+            logger.info("{} {} {}".format(Id,PlayerName,Year))
+
+            if Id:
+                query = "SELECT * FROM season_stats WHERE Id = {}".format(Id)
+            elif Year:
+                if PlayerName:
+                    query = "SELECT * FROM season_stats WHERE Year = {} AND player LIKE '%{}%".format(Year,PlayerName)
+                else:
+                    query = "SELECT * FROM season_stats WHERE Year = {}".format(Year)
+            else:
+                query = "SELECT * FROM season_stats LIMIT 1000"
+            
+            client = Helpers.AthenaClient()
+
+            response_query_execution_id = client.start_query_execution(
+                QueryString = query,
+                QueryExecutionContext = {
+                    'Database': database
+                },
+                ResultConfiguration = {
+                    'OutputLocation': output_location
+                }
+            )
+
+            QueryId = response_query_execution_id.get('QueryExecutionId')
+
+            response_get_query_details = client.get_query_execution(
+                QueryExecutionId = QueryId
+                )
+
+            QueryStatus = response_get_query_details['QueryExecution']['Status']
+
+            ExpiryDate = format(datetime.utcnow() + timedelta(hours = 24), '%Y-%m-%d %H:%M:%S')
+
+            if QueryStatus['State'] in ["FAILED","CANCELLED"]:
+                logger.error("error in execution {} {} {}".format(data, QueryId, QueryStatus['State']))
+
+                return make_response(jsonify(
+                    {
+                        "Message": {
+                            "QueryId": QueryId,
+                            "Status": QueryStatus,
+                            "ExpiryDate": ExpiryDate
+                        }
+                    }
+                ),404)
+
+            elif QueryStatus['State'] in ["QUEUED","RUNNING","SUCCEEDED"]:
+                logger.info("Successful execution {} {} {}".format(data, QueryId, QueryStatus['State']))
+
+                return make_response(jsonify(
+                    {
+                        "Message": {
+                            "QueryId": QueryId,
+                            "Status": QueryStatus,
+                            "ExpiryDate": ExpiryDate
+                        }
+                    }
+                ),200)
+            
+            else:
+
+                logger.info("Unknown Athena query status code {} {} {}".format(data ,QueryId, QueryStatus['State']))
+                
+                return make_response(jsonify(
+                    {
+                        "Message": "Internal Server Error"
+                    }
+                ),500)
+        except Exception as e:
+            logger.error(e)
+
 class GetData(Resource):
 
     QueryId: str
@@ -177,7 +268,7 @@ class GetData(Resource):
                             "QueryId": QueryId,
                             "Status": "Query Id is required"
                         },
-                        "data": {}
+                        "data": []
                     }
                 ),404)
             else:
@@ -194,7 +285,7 @@ class GetData(Resource):
                                 "QueryId": QueryId,
                                 "Status": "Query Does not exist"
                             },
-                            "data": {}
+                            "data": []
                         }
                     ),404)
                 QueryStatus = response_get_query_details['QueryExecution']['Status']['State']
@@ -206,7 +297,7 @@ class GetData(Resource):
                                 "QueryId": QueryId,
                                 "Status": "Query not ready " + QueryStatus
                             },
-                            "data": {}
+                            "data": []
                         }
                     ),404)
                 else:
@@ -226,7 +317,8 @@ class GetData(Resource):
                                     "QueryId": QueryId,
                                     "Status": QueryStatus
                                 },
-                                "data": json.loads(json.dumps(data))
+                                #"data": data
+                                "data": [(json.loads(json.dumps(data)))]
                             }
                         ),200)
                     else:
@@ -237,7 +329,7 @@ class GetData(Resource):
                                     "QueryId": QueryId,
                                     "Status": "Query Produced a Dataset With 0 Records"
                                 },
-                                "data": {}
+                                "data": []
                             }
                         ),404)
         except Exception as e:
@@ -255,6 +347,7 @@ class HelloWorld(Resource):
 
 api.add_resource(HelloWorld, "/HelloWorld")
 api.add_resource(GeneratePlayers, "/GeneratePlayers")
+api.add_resource(GenerateStats, "/GenerateStats")
 api.add_resource(GetData, "/GetData")
 
 
