@@ -71,7 +71,7 @@ class Helpers:
 class GeneratePlayers(Resource):
 
     PlayerName: str
-    Id: int
+    Id: str
 
     @limiter.limit("100/day")
     @auth.login_required
@@ -86,26 +86,52 @@ class GeneratePlayers(Resource):
             PlayerName = data.get("PlayerName")
             Id = data.get("Id")
 
+            if PlayerName:
+                PlayerName = str(PlayerName)
+                PlayerName = PlayerName.replace(";","")
+                PlayerName = '%' + PlayerName + '%'
+
+            if Id:
+                Id =str(Id)
+                Id = Id.replace(";","")
+
             if PlayerName and Id:
-                query = "SELECT * FROM players WHERE player like '%{}%' and Id = {}".format(PlayerName,Id)
+                query = "SELECT * FROM players WHERE player like ? and Id = ?"
+                parameters = [PlayerName,Id]
             elif PlayerName and not Id:
-                query = "SELECT * FROM players WHERE player like '%{}%'".format(PlayerName)
+                query = "SELECT * FROM players WHERE player like ?"
+                parameters = [PlayerName]
             elif Id and not PlayerName:
-                query = "SELECT * FROM players WHERE Id = {}".format(Id)
+                query = "SELECT * FROM players WHERE Id = ?"
+                parameters = [Id]
             else:
                 query = "SELECT * FROM players"
+                parameters = []
 
             client = Helpers.AthenaClient()
 
-            response_query_execution_id = client.start_query_execution(
-                QueryString = query,
-                QueryExecutionContext = {
-                    'Database': database
-                },
-                ResultConfiguration = {
-                    'OutputLocation': output_location
-                }
-            )
+            if len(parameters) > 0:
+                response_query_execution_id = client.start_query_execution(
+                    QueryString = query,
+                    QueryExecutionContext = {
+                        'Database': database
+                    },
+                    ExecutionParameters = parameters,
+                    ResultConfiguration = {
+                        'OutputLocation': output_location
+                    }
+                )
+            else:
+                response_query_execution_id = client.start_query_execution(
+                    QueryString = query,
+                    QueryExecutionContext = {
+                        'Database': database
+                    },
+                    ResultConfiguration = {
+                        'OutputLocation': output_location
+                    }
+                )
+
             QueryId = response_query_execution_id.get('QueryExecutionId')
 
             response_get_query_details = client.get_query_execution(
@@ -154,12 +180,18 @@ class GeneratePlayers(Resource):
             
         except Exception as e:
             logger.error(e)
+            return make_response(jsonify(
+                    {
+                        "Message": "Internal Server Error"
+                    }
+                ),500)
+            
 
 
 class GenerateStats(Resource):
 
-    Id: int
-    Year: int
+    Id: str
+    Year: str
     PlayerName: str
 
     @limiter.limit("100/day")
@@ -175,29 +207,57 @@ class GenerateStats(Resource):
             Id = data.get("Id")
             Year = data.get("Year")
             PlayerName = data.get("PlayerName")
-            logger.info("{} {} {}".format(Id,PlayerName,Year))
 
             if Id:
-                query = "SELECT * FROM season_stats WHERE Id = {}".format(Id)
+                Id = str(Id)
+                Id = Id.replace(";","")
+
+            if Year:
+                Year = str(Year)
+                Year = Year.replace(";","")
+            
+            if PlayerName:
+                PlayerName = str(PlayerName)
+                PlayerName = PlayerName.replace(";","")
+                PlayerName = '%' + PlayerName + '%'
+
+            if Id:
+                query = "SELECT * FROM season_stats WHERE Id = ?"
+                parameters = [Id]
             elif Year:
                 if PlayerName:
-                    query = "SELECT * FROM season_stats WHERE Year = {} AND player LIKE '%{}%".format(Year,PlayerName)
+                    query = "SELECT * FROM season_stats WHERE Year = ? AND player LIKE ?"
+                    parameters = [Year,PlayerName]
                 else:
-                    query = "SELECT * FROM season_stats WHERE Year = {}".format(Year)
+                    query = "SELECT * FROM season_stats WHERE Year = ?"
+                    parameters = [Year]
             else:
                 query = "SELECT * FROM season_stats LIMIT 1000"
+                parameters = []
             
             client = Helpers.AthenaClient()
 
-            response_query_execution_id = client.start_query_execution(
-                QueryString = query,
-                QueryExecutionContext = {
-                    'Database': database
-                },
-                ResultConfiguration = {
-                    'OutputLocation': output_location
-                }
-            )
+            if len(parameters) > 0:
+                response_query_execution_id = client.start_query_execution(
+                    QueryString = query,
+                    QueryExecutionContext = {
+                        'Database': database
+                    },
+                    ExecutionParameters = parameters,
+                    ResultConfiguration = {
+                        'OutputLocation': output_location
+                    }
+                )
+            else:
+                response_query_execution_id = client.start_query_execution(
+                    QueryString = query,
+                    QueryExecutionContext = {
+                        'Database': database
+                    },
+                    ResultConfiguration = {
+                        'OutputLocation': output_location
+                    }
+                )
 
             QueryId = response_query_execution_id.get('QueryExecutionId')
 
@@ -246,6 +306,11 @@ class GenerateStats(Resource):
                 ),500)
         except Exception as e:
             logger.error(e)
+            return make_response(jsonify(
+                    {
+                        "Message": "Internal Server Error"
+                    }
+                ),500)
 
 class GetData(Resource):
 
@@ -337,6 +402,11 @@ class GetData(Resource):
                         ),404)
         except Exception as e:
             logger.error(e)
+            return make_response(jsonify(
+                    {
+                        "Message": "Internal Server Error"
+                    }
+                ),500)
 
 
 
