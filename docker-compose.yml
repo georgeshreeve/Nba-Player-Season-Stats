@@ -1,0 +1,51 @@
+version: "3.7"
+services:
+  flask_app:
+    build: './FlaskApp'
+    environment:
+      - REDIS_URL=redis
+      - REDIS_PORT=6379
+      - MONGODB_HOST=mongodb
+      - MONGODB_PORT=27017
+      - USERNAME_=${USERNAME_}
+      - PASSWORD_=${PASSWORD_}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - REGION_NAME=${REGION_NAME}
+      - DATABASE=${DATABASE}
+      - OUTPUTLOCATION=${OUTPUTLOCATION}
+      - AWS_BUCKET=${AWS_BUCKET}
+      - BUCKET_PREFIX=${BUCKET_PREFIX}
+    ports:
+      - "5000:5000"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "500k"
+        max-file: "1"
+    depends_on:
+      - redis
+
+  simple_worker:
+    build: './CeleryWorker'
+    environment:
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - REGION_NAME=${REGION_NAME}
+      - AWS_BUCKET=${AWS_BUCKET}
+      - BUCKET_PREFIX=${BUCKET_PREFIX}
+    user: nobody
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "500k"
+        max-file: "1"
+    depends_on:
+      - redis
+      - flask_app
+
+
+  redis:
+    image: 'redis:4-alpine'
+    ports:
+      - '6379:6379'
